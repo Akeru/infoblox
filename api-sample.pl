@@ -16,17 +16,12 @@ sub handleError {
 	print "$message : $detail ($code)\n";
 }
 
-print "Reading config file\n";
+print "Connecting to grid master $Credentials::data->{master}\n";
 
-my $config = $Credentials::data;
-
-print "Connecting to grid master\n";
-
-my $session = Infoblox::Session->new(master => $config->{master}, username => $config->{username}, password => $config->{password});
+my $session = Infoblox::Session->new(master => $Credentials::data->{master}, username => $Credentials::data->{username}, password => $Credentials::data->{password});
 
 if ($session->status_code()) {
 	handleError $session,"Connection error";
 } else {
 	print "Connected successfully\n";
 }
-
