@@ -37,9 +37,18 @@ Sample usage :
 move-alias.pl
 -------------
 
-This the host aliases GUI is sometimes a bit weak, this simple script can be used to move an alias from a source host to a destination host:
+Since the host aliases GUI is sometimes a bit weak, this simple script can be used to move an alias from a source host to a destination host.
 
 Sample usage :
 
 	$ ./move-alias.pl www.example.org oldserver.example.org newserver.example.org
+
+sort-aliases.pl
+---------------
+
+Since the host aliases GUI is sometimes a bit weak, this simple script can be used to sort all the aliases of the given host. Warning, this is done by removing all the aliases to add them back sorted, so for a few seconds, none of the aliases are available. 
+
+Sample usage :
+
+	$ ./sort-aliases.pl server.example.org
 
