@@ -34,3 +34,12 @@ Sample usage :
 
 	$ ./api-sample.pl
 
+move-alias.pl
+-------------
+
+This the host aliases GUI is sometimes a bit weak, this simple script can be used to move an alias from a source host to a destination host:
+
+Sample usage :
+
+	$ ./move-alias.pl www.example.org oldserver.example.org newserver.example.org
+
