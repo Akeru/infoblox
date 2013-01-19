@@ -1,2 +1,5 @@
 Credentials.pm
-merge-records.pl
+*.iml
+**/.DS_Store
+.idea/
+.DS_Store

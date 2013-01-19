@@ -1,12 +1,11 @@
-Infoblox scripts repository
-=============================
-
-This repository contains various Infoblox related scripts.
-
 Disclamer
----------
+=========
 
 They work for me, please make no other assumptions.
+
+NIOS PAPI
+=========
+
 
 update-api.sh
 -------------
@@ -46,7 +45,9 @@ Sample usage :
 sort-aliases.pl
 ---------------
 
-Since the host aliases GUI is sometimes a bit weak, this simple script can be used to sort all the aliases of the given host. **Warning**, this is done by removing all the aliases to add them back sorted, so for a few seconds, none of the aliases are available. 
+Since the host aliases GUI is sometimes a bit weak, this simple script can be used to sort all the aliases of the given host.
+
+**Warning**, this is done by removing all the aliases to add them back sorted, so for a few seconds, none of the aliases are available.
 
 Sample usage :
 
@@ -55,7 +56,10 @@ Sample usage :
 add-fixedaddress-template.pl
 ----------------------------
 
-This simple script was inspired by the "Convert to Host" functionality of a FixedAddress record. So, it can be used to replace the IP address of the given host by its fixed address equivalent created from the given mac-address and template. **Warning**, this is done by removing the current IP address to add it back once created using the template, so for a few seconds, the DNS is unavailable.
+This simple script was inspired by the "Convert to Host" functionality of a FixedAddress record.
+So, it can be used to replace the IP address of the given host by its fixed address equivalent created from the given mac-address and template.
+
+**Warning**, this is done by removing the current IP address to add it back once created using the template, so for a few seconds, the DNS is unavailable.
 
 Sample usage :
 
