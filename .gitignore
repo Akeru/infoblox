@@ -1,5 +1,7 @@
 Credentials.pm
 *.iml
-**/.DS_Store
+*.swp
+*.DS_Store
 .idea/
-.DS_Store
+nios/wapi/vendor/*
+nios/wapi/composer.lock
