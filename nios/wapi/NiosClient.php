@@ -8,10 +8,14 @@ use Guzzle\Http\Message\Request;
 use Guzzle\Plugin\Cookie\CookiePlugin;
 use Guzzle\Plugin\Cookie\CookieJar\ArrayCookieJar;
 use Guzzle\Http\Exception\ClientErrorResponseException;
+use Guzzle\Log\ArrayLogAdapter;
+use Guzzle\Plugin\Log\LogPlugin;
+use Guzzle\Log\MessageFormatter;
 
 class NiosClient {
 
 	private $guzzle;
+	private $logger;
 
 	/**
 	 * @param $address : grid master name or ip
@@ -22,15 +26,22 @@ class NiosClient {
 	 * @throws Exception|Guzzle\Http\Exception\ClientErrorResponseException
 	 */
 	public function __construct($address, $username, $password, $sslCheck = true, $version = '1.0') {
+		$this->logger = new ArrayLogAdapter();
+
 		$this->guzzle = new Client('https://' . $address . '/wapi/v' . $version . '/');
 		$this->guzzle->setSslVerification($sslCheck);
 		$this->guzzle->addSubscriber(new CookiePlugin(new ArrayCookieJar()));
+		$this->guzzle->addSubscriber(new LogPlugin($this->logger, MessageFormatter::DEBUG_FORMAT));
+
 		$this->guzzle->getEventDispatcher()->addListener('request.before_send', function (Event $event) {
 			$event['request']->setHeader('Content-Type', 'application/json');
 		});
+
 		try {
+			//Get an empty object for auth purpose only
 			$this->guzzle->get()->setAuth($username, $password)->send();
 		} catch (ClientErrorResponseException $e) {
+			// 400 is the only error we should receive
 			if ($e->getResponse()->getStatusCode() != 400) {
 				throw $e;
 			}
@@ -38,14 +49,40 @@ class NiosClient {
 	}
 
 	/**
+	 * @param bool $flush : clear logs after retrieval, defaults to false
+	 * @return array
+	 */
+	public function getLogs($flush = false) {
+		$logs = $this->logger->getLogs();
+		$results = array();
+		if (!empty($logs)) {
+			foreach ($logs as $log) {
+				$results[] = $log['message'];
+			}
+			if ($flush) {
+				$this->logger->clearLogs();
+			}
+		}
+		return $results;
+	}
+
+	/**
+	 * Clear logs
+	 */
+	public function clearLogs() {
+		$this->logger->clearLogs();
+	}
+
+	/**
 	 * Wrapper to the HTTP GET method
 	 * @param $dataName : the object to retrieve
 	 * @param array $filters : the filters to apply, defaults to none
 	 * @param null $fields : the fields to select, default to WAPI default.
+	 * @param bool $single : return only the first record if found
+	 * @throws Exception
 	 * @return array : resulting objects
-	 * @throws Exception in case of invalid filters
 	 */
-	public function get($dataName, array $filters = array(), $fields = null) {
+	public function get($dataName, array $filters = array(), $fields = null, $single = false) {
 		$request = $this->guzzle->get($dataName);
 		$query = $request->getQuery();
 		if (!empty($filters)) {
@@ -75,7 +112,13 @@ class NiosClient {
 			$query->set('_return_fields', $fields);
 		}
 		$response = $request->send();
-		return $response->json();
+		$json = $response->json();
+		if ($single) {
+			if (!empty($json)) {
+				$json = $json[0];
+			}
+		}
+		return $json;
 	}
 
 	/**
@@ -93,7 +136,8 @@ class NiosClient {
 		}
 		$request->setBody($body);
 		$response = $request->send();
-		return $response->json();
+		$json = $response->json();
+		return $json;
 	}
 
 	/**
@@ -111,7 +155,8 @@ class NiosClient {
 		}
 		$request->setBody($body);
 		$response = $request->send();
-		return $response->json();
+		$json = $response->json();
+		return $json;
 	}
 
 	/**
@@ -135,11 +180,35 @@ class NiosClient {
 	}
 
 	/**
+	 * Get Host record
+	 * @see get
+	 */
+	public function getHost(array $filters = array(), $fields = null) {
+		return $this->get('record%3Ahost', $filters, $fields, true);
+	}
+
+	/**
+	 * Get Host record
+	 * @see get
+	 */
+	public function getHostByName($hostname, $fields = null) {
+		return $this->getHost(array(array('name', $hostname)), $fields);
+	}
+
+	/**
 	 * Get Network records
 	 * @see get
 	 */
 	public function getNetworks(array $filters = array(), $fields = null) {
 		return $this->get('network', $filters, $fields);
+	}
+
+	/**
+	 * Get Network record
+	 * @see get
+	 */
+	public function getNetwork(array $filters = array(), $fields = null) {
+		return $this->get('network', $filters, $fields, true);
 	}
 
 	/**
@@ -186,6 +255,53 @@ class NiosClient {
 			$names[] = $prefix . $suffix;
 		}
 		return $names;
+	}
+
+	/**
+	 * @param array $host : the host record to sort aliases from
+	 */
+	public function sortHostAliases(array $host) {
+		if (array_key_exists('_ref', $host)) {
+			$ref = str_replace(':', '%3A', $host['_ref']);
+			if (array_key_exists('aliases', $host)) {
+				$currentAliases = $host['aliases'];
+				if (!empty($currentAliases)) {
+					$sortedAliases = $currentAliases;
+					natcasesort($sortedAliases);
+					$diff = array_diff($currentAliases, $sortedAliases);
+					if (!empty($diff)) {
+						$this->put($ref, array('aliases' => array()));
+						$this->put($ref, array('aliases' => $sortedAliases));
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * @param array $fromHost : the host record to move alias from
+	 * @param array $toHost : the host record to move alias to
+	 * @param $alias : the alias to move
+	 */
+	public function moveHostAliases(array $fromHost, array $toHost, $alias) {
+		if (array_key_exists('_ref', $fromHost)) {
+			$fromHostRef = str_replace(':', '%3A', $fromHost['_ref']);
+			if (array_key_exists('aliases', $fromHost)) {
+				$fromHostAliases = $fromHost['aliases'];
+				if (in_array($alias, $fromHostAliases)) {
+					if (array_key_exists('_ref', $toHost)) {
+						$toHostRef = str_replace(':', '%3A', $toHost['_ref']);
+						if (array_key_exists('aliases', $toHost)) {
+							$toHostAliases = $toHost['aliases'];
+							$toHostAliases[] = $alias;
+							$newFromHostAliases = array_diff($fromHostAliases, array($alias));
+							$this->put($fromHostRef, array('aliases' => $newFromHostAliases));
+							$this->put($toHostRef, array('aliases' => $toHostAliases));
+						}
+					}
+				}
+			}
+		}
 	}
 
 }
