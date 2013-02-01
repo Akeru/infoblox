@@ -14,7 +14,7 @@ use Guzzle\Log\MessageFormatter;
 
 class NiosClient {
 
-	private $guzzle;
+	private $api;
 	private $logger;
 
 	/**
@@ -28,24 +28,73 @@ class NiosClient {
 	public function __construct($address, $username, $password, $sslCheck = true, $version = '1.0') {
 		$this->logger = new ArrayLogAdapter();
 
-		$this->guzzle = new Client('https://' . $address . '/wapi/v' . $version . '/');
-		$this->guzzle->setSslVerification($sslCheck);
-		$this->guzzle->addSubscriber(new CookiePlugin(new ArrayCookieJar()));
-		$this->guzzle->addSubscriber(new LogPlugin($this->logger, MessageFormatter::DEBUG_FORMAT));
+		$this->api = new Client('https://' . $address . '/wapi/v' . $version . '/');
+		$this->api->setSslVerification($sslCheck);
+		$this->api->addSubscriber(new CookiePlugin(new ArrayCookieJar()));
+		$this->api->addSubscriber(new LogPlugin($this->logger, MessageFormatter::DEBUG_FORMAT));
 
-		$this->guzzle->getEventDispatcher()->addListener('request.before_send', function (Event $event) {
+		$this->api->getEventDispatcher()->addListener('request.before_send', function (Event $event) {
 			$event['request']->setHeader('Content-Type', 'application/json');
 		});
 
 		try {
 			//Get an empty object for auth purpose only
-			$this->guzzle->get()->setAuth($username, $password)->send();
+			$this->api->get()->setAuth($username, $password)->send();
 		} catch (ClientErrorResponseException $e) {
 			// 400 is the only error we should receive
 			if ($e->getResponse()->getStatusCode() != 400) {
 				throw $e;
 			}
 		}
+	}
+
+	/**
+	 * Get WAPI supported objects
+	 */
+	public function getObjects() {
+		$request = $this->api->get('/wapidoc');
+		$response = $request->send();
+		$body = $response->getBody();
+		$dom = new DOMDocument;
+		$dom->loadHTML($body);
+		$xpath = new DOMXpath($dom);
+		$elements = $xpath->query("//div[@id='objects']//ul/li");
+		$objects = array();
+		for ($i = 0; $i < $elements->length; $i++) {
+			$value = $elements->item($i)->nodeValue;
+			$parts = explode(' ', $value);
+			$objectName = $parts[0];
+			$objects[] = $objectName;
+		}
+		return $objects;
+	}
+
+	/**
+	 * Get WAPI fields for the given object
+	 * @param $objectName
+	 * @return array
+	 */
+	public function getObjectAttributes($objectName) {
+		$objectName = str_replace('%3A', '.', $objectName);
+		$objectName = str_replace(':', '.', $objectName);
+		$request = $this->api->get('/wapidoc/objects/' . $objectName . '.html');
+		$response = $request->send();
+		$body = $response->getBody();
+		$dom = new DOMDocument;
+		$dom->loadHTML($body);
+		$xpath = new DOMXpath($dom);
+		$elements = $xpath->query("//div[@id='fields']/div/@id");
+		$attributes = array();
+		for ($i = 0; $i < $elements->length; $i++) {
+			$value = $elements->item($i)->nodeValue;
+			$value = str_replace('-', '_', $value);
+			if($value == 'auto_create_reversezone' || $value == 'template') {
+
+			} else {
+				$attributes[] = $value;
+			}
+		}
+		return $attributes;
 	}
 
 	/**
@@ -75,15 +124,15 @@ class NiosClient {
 
 	/**
 	 * Wrapper to the HTTP GET method
-	 * @param $dataName : the object to retrieve
+	 * @param $objectName : the object to retrieve
 	 * @param array $filters : the filters to apply, defaults to none
-	 * @param null $fields : the fields to select, default to WAPI default.
+	 * @param null $fields : the fields to select, default to all (@see getObjectAttributes).
 	 * @param bool $single : return only the first record if found
 	 * @throws Exception
 	 * @return array : resulting objects
 	 */
-	public function get($dataName, array $filters = array(), $fields = null, $single = false) {
-		$request = $this->guzzle->get($dataName);
+	public function get($objectName, array $filters = array(), $fields = null, $single = false) {
+		$request = $this->api->get($objectName);
 		$query = $request->getQuery();
 		if (!empty($filters)) {
 			foreach ($filters as $filter) {
@@ -105,12 +154,13 @@ class NiosClient {
 				}
 			}
 		}
-		if (!empty($fields)) {
-			if (is_array($fields)) {
-				$fields = implode(',', $fields);
-			}
-			$query->set('_return_fields', $fields);
+		if (empty($fields)) {
+			$fields = $this->getObjectAttributes($objectName);
 		}
+		if (is_array($fields)) {
+			$fields = implode(',', $fields);
+		}
+		$query->set('_return_fields', $fields);
 		$response = $request->send();
 		$json = $response->json();
 		if ($single) {
@@ -128,7 +178,7 @@ class NiosClient {
 	 * @return array
 	 */
 	public function post($url, array $params = array()) {
-		$request = $this->guzzle->post($url);
+		$request = $this->api->post($url);
 		if (empty($params)) {
 			$body = '{}';
 		} else {
@@ -147,7 +197,7 @@ class NiosClient {
 	 * @return array
 	 */
 	public function put($url, array $params = array()) {
-		$request = $this->guzzle->put($url);
+		$request = $this->api->put($url);
 		if (empty($params)) {
 			$body = '{}';
 		} else {
@@ -209,6 +259,30 @@ class NiosClient {
 	 */
 	public function getNetwork(array $filters = array(), $fields = null) {
 		return $this->get('network', $filters, $fields, true);
+	}
+
+	/**
+	 * Get host ipv4 addresses records
+	 * @see get
+	 */
+	public function getHostAddresses(array $filters = array(), $fields = null) {
+		return $this->get('record%3Ahost_ipv4addr', $filters, $fields);
+	}
+
+	/**
+	 * Get host ipv4 address record
+	 * @see get
+	 */
+	public function getHostAddress(array $filters = array(), $fields = null) {
+		return $this->get('record%3Ahost_ipv4addr', $filters, $fields, true);
+	}
+
+	/**
+	 * Get host ipv4 address record
+	 * @see get
+	 */
+	public function getHostAddressByAddress($address, $fields = null) {
+		return $this->get('record%3Ahost_ipv4addr', array(array('ipv4addr', $address)), $fields, true);
 	}
 
 	/**
@@ -304,4 +378,14 @@ class NiosClient {
 		}
 	}
 
+	/**
+	 * @param array $ipv4address
+	 * @param $mac
+	 */
+	public function addMacAddressReservationForHostAddress(array $ipv4address, $mac) {
+		if (array_key_exists('_ref', $ipv4address)) {
+			$hostAddressRef = str_replace(':', '%3A', $ipv4address['_ref']);
+			$this->put($hostAddressRef, array('mac' => $mac, 'configure_for_dhcp' => true));
+		}
+	}
 }
