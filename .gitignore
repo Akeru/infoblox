@@ -1,7 +1,9 @@
-Credentials.pm
 *.iml
 *.swp
 *.DS_Store
 .idea/
+netmri/
+nios/papi/Credentials.pm
+nios/papi/merge-records.pl
 nios/wapi/vendor/*
 nios/wapi/composer.lock

@@ -88,7 +88,7 @@ class NiosClient {
 		for ($i = 0; $i < $elements->length; $i++) {
 			$value = $elements->item($i)->nodeValue;
 			$value = str_replace('-', '_', $value);
-			if($value == 'auto_create_reversezone' || $value == 'template') {
+			if ($value == 'auto_create_reversezone' || $value == 'template') {
 
 			} else {
 				$attributes[] = $value;
@@ -302,7 +302,8 @@ class NiosClient {
 			}
 			$params['exclude'] = $excludes;
 		}
-		return $this->callFunction($ref, 'next_available_ip', $params);
+		$results = $this->callFunction($ref, 'next_available_ip', $params);
+		return ($results['ips']);
 	}
 
 	/**
@@ -332,6 +333,8 @@ class NiosClient {
 	}
 
 	/**
+	 * Since the host aliases GUI is sometimes a bit weak, this can be used to sort all the aliases of the given host.
+	 * Warning, this is done by removing all the aliases to add them back sorted, so for a few seconds, none of the aliases are available.
 	 * @param array $host : the host record to sort aliases from
 	 */
 	public function sortHostAliases(array $host) {
@@ -353,6 +356,7 @@ class NiosClient {
 	}
 
 	/**
+	 * Since the host aliases GUI is sometimes a bit weak, this can be used to move an alias from a source host to a destination host.
 	 * @param array $fromHost : the host record to move alias from
 	 * @param array $toHost : the host record to move alias to
 	 * @param $alias : the alias to move
